@@ -1,17 +1,18 @@
 const mongoose = require('mongoose');
 
 const workoutSchema = new mongoose.Schema({
-    userId: {
-        type: String,
-        required: true
-    },
+	userId: {
+	    type: mongoose.Schema.Types.ObjectId,
+	    ref: 'User',
+	    required: true
+	},
     name: {
         type: String,
-        required: [true, 'Workout Name is Required']
+        required: [true, 'Workout name is required']
     },
     duration: {
         type: String,
-        required: [true, 'Workout duration is Required']
+        required: [true, 'Duration is required']
     },
     status: {
         type: String,

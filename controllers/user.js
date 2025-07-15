@@ -1,98 +1,73 @@
-//[SECTION] Dependencies and Modules
 const bcrypt = require('bcrypt');
 const User = require('../models/User');
+// const Enrollment = require("../models/Enrollment");
 const auth = require('../auth');
 
-const { errorHandler } = auth;
 
-//[SECTION] User registration
 
+// Register user
 module.exports.registerUser = (req, res) => {
+	if(!req.body.email.includes('@')) {
+		return res.status(200).send({message : 'Invalid email format'})
+	}
 
-    // Checks if the email is in the right format
-    if (!req.body.email.includes("@")){
-        // if the email is not in the right format, send a message 'Invalid email format'.
-        return res.status(400).send({ message: 'Invalid email format' });
-    }
-    // Checks if the mobile number has the correct number of characters
-    else if (req.body.mobileNo.length !== 11){
-        // if the mobile number is not in the correct number of characters, send a message 'Mobile number is invalid'.
-        return res.status(400).send({ message: 'Mobile number is invalid' });
-    }
-    // Checks if the password has atleast 8 characters
-    else if (req.body.password.length < 8) {
-        // If the password is not atleast 8 characters, send a message 'Password must be atleast 8 characters long'.
-        return res.status(400).send({ message: 'Password must be atleast 8 characters long' });
-    // If all needed requirements are achieved
-    } else {
-        let newUser = new User({
-            firstName : req.body.firstName,
-            lastName : req.body.lastName,
-            email : req.body.email,
-            mobileNo : req.body.mobileNo,
-            password : bcrypt.hashSync(req.body.password, 10)
-        })
+	if(req.body.password.length < 8){
+		return res.status(200).send({ message: 'Password must be at least 8 characters' });
+	}
 
-        return newUser.save()
-        // if all needed requirements are achieved, send a success message 'User registered successfully' and return the newly created user.
-        .then((result) => res.status(201).send({
-            message: 'Registered successfully',
-            user: result
-        }))
-        .catch(error => errorHandler(error, req, res));
-    }
-};
+	// Checking if email is already registered and if so, early exit
+	User.findOne({email : req.body.email })
+	.then(existingUser => {
+		if(existingUser){
+			return res.status(200).send({ message: 'Email Already Exists' });
+		}
+	
 
-//[SECTION] User authentication
+		const newUser = new User({
+			email : req.body.email,
+			password : bcrypt.hashSync(req.body.password, 10)
+		});
+
+		return newUser.save()
+		.then(user => {
+			res.status(201).send({
+				message : 'Successfully Registered'
+			});
+		});
+	})
+	.catch(err => auth.errorHandler(err, req, res));
+}
+
+// Login
 module.exports.loginUser = (req, res) => {
+	User.findOne({ email: req.body.email })
+		.then(user => {
+			if (!user) {
+				return res.status(200).send({ message: 'User not found' });
+			}
 
-    if(req.body.email.includes("@")){
-        return User.findOne({ email : req.body.email })
-        .then(result => {
-            if(result == null){
-                // if the email is not found, send a message 'No email found'.
-                return res.status(404).send({ message: 'No email found' });
-            } else {
-                const isPasswordCorrect = bcrypt.compareSync(req.body.password, result.password);
-                if (isPasswordCorrect) {
-                    // if all needed requirements are achieved, send a success message 'User logged in successfully' and return the access token.
-                    return res.status(200).send({ 
-                        access : auth.createAccessToken(result)
-                        })
-                } else {
-                    // if the email and password is incorrect, send a message 'Incorrect email or password'.
-                    return res.status(401).send({ message: 'Incorrect email or password' });
-                }
-            }
-        })
-        .catch(error => errorHandler(error, req, res));
-    } else{
-        // if the email used in not in the right format, send a message 'Invalid email format'.
-        return res.status(400).send({ message: 'Invalid email format' });
-    }
+			const isPasswordCorrect = bcrypt.compareSync(req.body.password, user.password);
+
+			if (!isPasswordCorrect) {
+				return res.status(200).send({ message: 'Incorrect password' });
+			}
+
+			res.status(200).send({
+				access: auth.createAccessToken(user)
+			});
+		})
+		.catch(err => auth.errorHandler(err, req, res));
 };
 
-
-//[Section] Activity: Retrieve user details
-
+// Get user details (profile)
 module.exports.getProfile = (req, res) => {
-    return User.findById(req.user.id)
+  return User.findById(req.user.id)
+    .select('-password')
     .then(user => {
-
-        if(!user){
-            // if the user has invalid token, send a message 'invalid signature'.
-            return res.status(200).send({ message: 'invalid signature' })
-        }else {
-            // if the user is found, return the user.
-            user.password = "";
-            return res.status(200).send({
-                user: {
-                    id: user._id,
-                    email: user.email,
-                    __v: user.__v
-                }
-            });
-        }  
+      if (!user) {
+        return res.status(200).send({ message: 'User not found' });
+      }
+      res.status(200).send(user);
     })
-    .catch(error => errorHandler(error, req, res));
+    .catch(error => auth.errorHandler(error, req, res)); // make sure `auth` is imported
 };
